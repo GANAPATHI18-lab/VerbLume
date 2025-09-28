@@ -1,0 +1,8 @@
+{
+  "name": "VerbLume",
+  "description": "An AI-powered language learning application that allows you to learn numerous languages from a base language of your choice. It covers a vast range of categories and learning modules.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "prompt": ""
+}
