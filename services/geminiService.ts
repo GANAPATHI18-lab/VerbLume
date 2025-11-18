@@ -200,12 +200,13 @@ export const generateLearningContent = async (
                         pronunciationInBase: { type: Type.STRING, description: `Phonetic guide for the word using ${baseLanguage} script.` },
                         meaning: { type: Type.STRING, description: `The ${baseLanguage} meaning of the word.` },
                         exampleSentence: { type: Type.STRING, description: "An example sentence using the word in the target language." },
+                        exampleSentenceMeaning: { type: Type.STRING, description: `The complete meaning of the example sentence in ${baseLanguage}.` },
                         examplePronunciationEn: { type: Type.STRING, description: "Phonetic guide for the example sentence using English letters." },
                         examplePronunciationInBase: { type: Type.STRING, description: `Phonetic guide for the example sentence using ${baseLanguage} script.` },
                         exampleWordByWord: wordByWordSchemaPart,
                         isVisualizable: { type: Type.BOOLEAN, description: "True if the word represents a concrete, easily visualizable object, otherwise false." }
                     },
-                    required: ["word", "pronunciationEn", "pronunciationInBase", "meaning", "exampleSentence", "examplePronunciationEn", "examplePronunciationInBase", "exampleWordByWord", "isVisualizable"]
+                    required: ["word", "pronunciationEn", "pronunciationInBase", "meaning", "exampleSentence", "exampleSentenceMeaning", "examplePronunciationEn", "examplePronunciationInBase", "exampleWordByWord", "isVisualizable"]
                 }
             },
             proTip: proTipSchemaPart,
@@ -354,7 +355,7 @@ Where relevant, also provide a helpful 'Pro Tip' in ${baseLanguage}.`;
             break;
         case "New Vocabulary":
             schema = vocabularySchema;
-            prompt = `${basePrompt} The user wants to learn 'New Vocabulary'. Create a lesson with 3 new words according to the JSON schema. For each word, determine if it is 'isVisualizable'.${historyInstruction}`;
+            prompt = `${basePrompt} The user wants to learn 'New Vocabulary'. Create a lesson with 3 new words according to the JSON schema. For each word, determine if it is 'isVisualizable'. Ensure each example sentence has a clear, corresponding translation in ${baseLanguage}.${historyInstruction}`;
             break;
         case "Listening":
             schema = listeningSchema;
@@ -500,13 +501,15 @@ const languageDetailsSchema = {
     properties: {
         nativeName: { type: Type.STRING, description: "The name of the language in the requested base language." },
         emoji: { type: Type.STRING, description: "A single, representative emoji for the language." },
-        ttsCode: { type: Type.STRING, description: "The BCP-47 language tag for Text-to-Speech (e.g., 'ja-JP' for Japanese)." }
+        ttsCode: { type: Type.STRING, description: "The BCP-47 language tag for Text-to-Speech (e.g., 'ja-JP' for Japanese)." },
+        greeting: { type: Type.STRING, description: "A common greeting or short friendly phrase in the language." },
+        greetingInBase: { type: Type.STRING, description: "The meaning of the greeting in the base language." }
     },
-    required: ["nativeName", "emoji", "ttsCode"]
+    required: ["nativeName", "emoji", "ttsCode", "greeting", "greetingInBase"]
 };
 
-export const generateLanguageDetails = async (languageName: string, baseLanguage: string): Promise<{ nativeName: string; emoji: string; ttsCode: string; }> => {
-    const prompt = `For the language "${languageName}", provide its name in the ${baseLanguage} language, a single suitable emoji, and its standard BCP-47 TTS code. Return a JSON object matching the schema.`;
+export const generateLanguageDetails = async (languageName: string, baseLanguage: string): Promise<{ nativeName: string; emoji: string; ttsCode: string; greeting: string; greetingInBase: string; }> => {
+    const prompt = `For the language "${languageName}", provide its name in the ${baseLanguage} language, a single suitable emoji, its standard BCP-47 TTS code, and a common greeting with its meaning in ${baseLanguage}. Return a JSON object matching the schema.`;
     const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
         model: 'gemini-2.5-flash', contents: prompt,
         config: { responseMimeType: "application/json", responseSchema: languageDetailsSchema }

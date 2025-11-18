@@ -1,3 +1,4 @@
+
 import type { ReactNode } from 'react';
 import type { Chat } from '@google/genai';
 
@@ -9,6 +10,8 @@ export interface LanguageDetails {
     emoji: string;
     ttsCode: string;
     isCustom?: boolean;
+    greeting?: string;
+    greetingInBase?: string;
 }
 
 export const LEARNING_MODES = ["Listening", "Speaking", "New Vocabulary", "Core Grammar", "Visual Context", "Storyboard Scenario", "Situational Practice", "AI Role-Play", "Quiz"] as const;
@@ -192,10 +195,12 @@ export interface VocabularyItem {
   pronunciationInBase: string;
   meaning: string; // Base language meaning of the word
   exampleSentence: string;
+  exampleSentenceMeaning?: string; // Meaning of the sentence in Base language
   examplePronunciationEn: string;
   examplePronunciationInBase: string;
   exampleWordByWord: WordByWord[];
   imageBytes?: string;
+  isVisualizable: boolean;
 }
 
 export interface VocabularyContent {

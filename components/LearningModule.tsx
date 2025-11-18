@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, FormEvent, useRef, useMemo } from 'react';
 import type { Chat } from '@google/genai';
 import type { Language, LearningMode, LearningContent, GrammarContent, VocabularyContent, ListeningContent, SpeakingContent, QuizContent, AnyQuizQuestion, QuizType, MatchItem, PictureMCQQuestion, VisualContextContent, Tone, StoryboardContent, SituationalPracticeInitContent, SituationalPracticeResponseContent, RolePlaySetupContent, RolePlayScenario, ChatMessage, AIFeedback, LanguageDetails, Difficulty, WordByWord } from '../types';
@@ -416,7 +417,13 @@ const LearningModule: React.FC<LearningModuleProps> = ({
                     <p className="mt-2 text-lg text-gray-800 dark:text-gray-300"><b>Meaning:</b> {word.meaning}</p>
                     <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
                         <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">Example Sentence:</p>
-                        <div className="flex items-center gap-2 mt-1"><p className="font-medium text-gray-800 dark:text-gray-200">"{word.exampleSentence}"</p><Button variant="secondary" size="sm" onClick={() => handleSpeak(word.exampleSentence)}><SpeakerIcon/></Button></div>
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                            <p className="font-medium text-gray-800 dark:text-gray-200">"{word.exampleSentence}"</p>
+                            <Button variant="secondary" size="sm" onClick={() => handleSpeak(word.exampleSentence)}><SpeakerIcon/></Button>
+                        </div>
+                        {word.exampleSentenceMeaning && (
+                             <p className="text-sm text-gray-600 dark:text-gray-400 italic mt-1">({word.exampleSentenceMeaning})</p>
+                        )}
                         {renderPronunciationGuide(word.examplePronunciationEn, word.examplePronunciationInBase, 'xs')}
                         {renderWordByWord(word.exampleWordByWord, handleSpeak, baseLanguage)}
                     </div>

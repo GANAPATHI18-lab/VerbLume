@@ -1,3 +1,4 @@
+
 import React from 'react';
 import type { Language, LanguageDetails } from '../types';
 import Card from './ui/Card';
@@ -48,6 +49,12 @@ const LanguageSelector: React.FC<LanguageSelectorProps> = ({ onSelect, languages
             <span className="text-6xl mb-4">{lang.emoji}</span>
             <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{lang.name}</h3>
             <p className="text-gray-500 dark:text-gray-400">{lang.nativeName}</p>
+            {lang.greeting && (
+                <p className="text-sm text-blue-600 dark:text-blue-400 mt-2 italic">
+                    "{lang.greeting}" 
+                    {lang.greetingInBase ? <span className="text-gray-400 dark:text-gray-500 not-italic"> ({lang.greetingInBase})</span> : ''}
+                </p>
+            )}
           </Card>
         ))}
         <AddLanguageForm onAddLanguage={onAddLanguage} />
