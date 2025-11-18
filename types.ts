@@ -14,7 +14,7 @@ export interface LanguageDetails {
     greetingInBase?: string;
 }
 
-export const LEARNING_MODES = ["Listening", "Speaking", "New Vocabulary", "Core Grammar", "Visual Context", "Storyboard Scenario", "Situational Practice", "AI Role-Play", "Quiz"] as const;
+export const LEARNING_MODES = ["Listening", "Speaking", "New Vocabulary", "Core Grammar", "Visual Context", "Storyboard Scenario", "Situational Practice", "AI Role-Play", "AI Tutor", "Quiz"] as const;
 export type LearningMode = typeof LEARNING_MODES[number];
 
 export const QUIZ_TYPES = ["Vocabulary", "Grammar Usage", "Comprehension", "Error Correction", "Matching Pairs", "Dialogue Completion", "Visual Association", "Mixed Review"] as const;
@@ -46,6 +46,21 @@ export interface Selection {
   quizType: QuizType | null;
   tone: Tone | null;
   difficulty: Difficulty | null;
+}
+
+// --- SAVED LESSONS FOR OFFLINE ---
+export interface SavedLesson {
+    id: string;
+    timestamp: number;
+    language: Language;
+    baseLanguage: Language;
+    category: string;
+    subCategory: string;
+    mode: LearningMode;
+    content: LearningContent;
+    quizType?: QuizType | null;
+    tone?: Tone | null;
+    difficulty?: Difficulty | null;
 }
 
 // --- QUIZ QUESTION TYPES (DISCRIMINATED UNION) ---
@@ -144,6 +159,7 @@ export interface AIFeedback {
     hasError: boolean;
     correctedSentence: string;
     explanation: string;
+    pronunciationTip?: string;
 }
 
 export interface ChatMessage {
@@ -290,6 +306,12 @@ export interface SituationalPracticeResponseContent {
     };
 }
 
+export interface AiTutorInitContent {
+    type: 'ai_tutor_init';
+    initialMessage: string;
+    tutorPersona: string;
+}
+
 export interface GrammarTopicDetails {
     originalTopic: string;
     topicInTargetLanguage: string;
@@ -309,4 +331,5 @@ export type LearningContent =
   | StoryboardContent
   | SituationalPracticeInitContent
   | SituationalPracticeResponseContent
-  | RolePlaySetupContent;
+  | RolePlaySetupContent
+  | AiTutorInitContent;

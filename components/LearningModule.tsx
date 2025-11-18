@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useCallback, FormEvent, useRef, useMemo } from 'react';
 import type { Chat } from '@google/genai';
-import type { Language, LearningMode, LearningContent, GrammarContent, VocabularyContent, ListeningContent, SpeakingContent, QuizContent, AnyQuizQuestion, QuizType, MatchItem, PictureMCQQuestion, VisualContextContent, Tone, StoryboardContent, SituationalPracticeInitContent, SituationalPracticeResponseContent, RolePlaySetupContent, RolePlayScenario, ChatMessage, AIFeedback, LanguageDetails, Difficulty, WordByWord } from '../types';
+import type { Language, LearningMode, LearningContent, GrammarContent, VocabularyContent, ListeningContent, SpeakingContent, QuizContent, AnyQuizQuestion, QuizType, MatchItem, PictureMCQQuestion, VisualContextContent, Tone, StoryboardContent, SituationalPracticeInitContent, SituationalPracticeResponseContent, RolePlaySetupContent, RolePlayScenario, ChatMessage, AIFeedback, LanguageDetails, Difficulty, WordByWord, SavedLesson, AiTutorInitContent } from '../types';
 import { generateLearningContent, generateQuizExplanation, generateSituationalResponse, createChatSession, sendChatMessage } from '../services/geminiService';
+import { useSavedLessons } from '../hooks/useSavedLessons';
 import Spinner from './ui/Spinner';
 import Button from './ui/Button';
 import ArrowLeftIcon from './icons/ArrowLeftIcon';
@@ -16,6 +17,7 @@ import CheckCircleIcon from './icons/CheckCircleIcon';
 import XCircleIcon from './icons/XCircleIcon';
 import LightbulbIcon from './icons/LightbulbIcon';
 import ExclamationTriangleIcon from './icons/ExclamationTriangleIcon';
+import DownloadIcon from './icons/DownloadIcon';
 
 interface SpeechRecognition {
   continuous: boolean;
@@ -47,6 +49,7 @@ interface LearningModuleProps {
   quizType: QuizType | null;
   tone: Tone | null;
   difficulty: Difficulty | null;
+  preloadedContent: LearningContent | null;
   onBack: () => void;
   onQuizComplete: (score: number) => void;
   onContentLoaded: (activityId: string) => void;
@@ -205,7 +208,7 @@ const renderPronunciationGuide = (en: string, base: string, size: 'sm' | 'xs' = 
 };
 
 const LearningModule: React.FC<LearningModuleProps> = ({
-  language, baseLanguage, languages, category, subCategory, mode, quizType, tone, difficulty, onBack, onQuizComplete, onContentLoaded
+  language, baseLanguage, languages, category, subCategory, mode, quizType, tone, difficulty, preloadedContent, onBack, onQuizComplete, onContentLoaded
 }) => {
   const [content, setContent] = useState<LearningContent | null>(null);
   const [loading, setLoading] = useState(true);
@@ -214,7 +217,11 @@ const LearningModule: React.FC<LearningModuleProps> = ({
   const [contentKey, setContentKey] = useState(0);
   const ttsLanguageCode = languages.find(l => l.name === language)?.ttsCode || 'en-US';
   const { isListening, transcript, error: speechError, startListening, stopListening, hasRecognitionSupport } = useSpeechRecognition(ttsLanguageCode);
+  const { saveLesson, isLessonSaved } = useSavedLessons();
   
+  // Generate a unique ID for this specific content session to check save status
+  const [currentLessonId, setCurrentLessonId] = useState<string>("");
+
   const quizId = useMemo(() => mode === 'Quiz' && quizType ? `quiz-progress-${language}-${subCategory}-${quizType}` : null, [language, subCategory, mode, quizType]);
 
   const [quizState, setQuizState] = useState<QuizState>(() => getInitialQuizState(quizId));
@@ -244,29 +251,102 @@ const LearningModule: React.FC<LearningModuleProps> = ({
 
   const fetchContent = useCallback(async () => {
     setLoading(true); setError(null); setContent(null);
+    // Reset chat state when fetching new content
+    setChatMessages([]); setChatSession(null); setSelectedScenario(null);
+    
     try {
-      const newContent = await generateLearningContent(language, baseLanguage, category, subCategory, mode, history, { quizType, tone, difficulty });
-      setContent(newContent);
-      onContentLoaded(`${language}:${subCategory}:${mode}${quizType || ''}${tone || ''}`);
-      if (newContent.type === 'quiz') setVisibleExplanations(new Set());
-      if (newContent.type === 'storyboard') setCurrentSceneIndex(0);
-      if (newContent.type === 'role_play_setup') { setSelectedScenario(null); setChatMessages([]); }
+      if (preloadedContent) {
+          // Use preloaded content from saved lessons if available
+          setContent(preloadedContent);
+      } else {
+          if (!navigator.onLine) {
+              throw new Error("You are offline. Please check your internet connection or access your Saved Lessons.");
+          }
+          const newContent = await generateLearningContent(language, baseLanguage, category, subCategory, mode, history, { quizType, tone, difficulty });
+          setContent(newContent);
+          onContentLoaded(`${language}:${subCategory}:${mode}${quizType || ''}${tone || ''}`);
+          
+          // Create a unique ID for this fresh content
+          setCurrentLessonId(`${language}-${subCategory}-${Date.now()}`);
+      }
+      
+      if (preloadedContent?.type === 'quiz' || (!preloadedContent && mode === 'Quiz')) setVisibleExplanations(new Set());
+      if (preloadedContent?.type === 'storyboard' || (!preloadedContent && mode === 'Storyboard Scenario')) setCurrentSceneIndex(0);
+      
     } catch (e: any) {
       setError(e.message || "An unexpected error occurred.");
     } finally {
       setLoading(false);
       setContentKey(k => k + 1);
     }
-  }, [language, baseLanguage, category, subCategory, mode, quizType, tone, difficulty, history, onContentLoaded]);
+  }, [language, baseLanguage, category, subCategory, mode, quizType, tone, difficulty, history, onContentLoaded, preloadedContent]);
 
-  useEffect(() => { fetchContent(); }, []);
+  useEffect(() => { fetchContent(); }, [fetchContent]);
+
+  // Initialize AI Tutor Chat automatically
+  useEffect(() => {
+      if (content?.type === 'ai_tutor_init' && !chatSession) {
+          const instruction = `You are an expert language tutor for ${language}. The user's level is ${difficulty || 'Intermediate'}. 
+          The topic is '${subCategory}'. Your persona is: ${content.tutorPersona}.
+          Engage the user in a conversation in ${language}. 
+          CRITICAL: Every response MUST be a valid JSON object with this structure: 
+          { "response": "your reply in ${language}", "feedback": { "hasError": boolean, "correctedSentence": "string", "explanation": "string (${baseLanguage})", "pronunciationTip": "optional string if user used complex words or typed phonetically" } }.
+          If the user's grammar is perfect, set hasError to false. Always be encouraging.`;
+          
+          const session = createChatSession(instruction);
+          setChatSession(session);
+          setChatMessages([{ id: 'ai-init', sender: 'ai', text: content.initialMessage }]);
+      }
+  }, [content, chatSession, language, difficulty, subCategory, baseLanguage]);
+
 
   const handleRefresh = () => {
     if (content) {
       if (quizId) localStorage.removeItem(quizId);
       setHistory(prev => [...prev, content]);
     }
-    fetchContent();
+
+    if (navigator.onLine) {
+        setLoading(true); setError(null); setContent(null);
+        // Reset chat for refresh
+        setChatMessages([]); setChatSession(null); setSelectedScenario(null);
+
+        generateLearningContent(language, baseLanguage, category, subCategory, mode, history, { quizType, tone, difficulty })
+            .then(newContent => {
+                setContent(newContent);
+                setCurrentLessonId(`${language}-${subCategory}-${Date.now()}`);
+                onContentLoaded(`${language}:${subCategory}:${mode}${quizType || ''}${tone || ''}`);
+                setLoading(false);
+                setContentKey(k => k + 1);
+            })
+            .catch(e => {
+                setError(e.message);
+                setLoading(false);
+            });
+    } else {
+        setError("You are offline. Cannot generate new content.");
+    }
+  };
+
+  const handleSave = () => {
+      if (!content) return;
+      const idToSave = currentLessonId || `saved-${Date.now()}`;
+      const lessonToSave: SavedLesson = {
+          id: idToSave,
+          timestamp: Date.now(),
+          language,
+          baseLanguage,
+          category,
+          subCategory,
+          mode,
+          content,
+          quizType,
+          tone,
+          difficulty
+      };
+      saveLesson(lessonToSave);
+      // Force re-render of button state (handled by hook state update usually, but ID matching helps)
+      setCurrentLessonId(idToSave); 
   };
   
   const handleAnswerChange = (questionIndex: number, answer: QuizAnswer) => {
@@ -291,15 +371,20 @@ const LearningModule: React.FC<LearningModuleProps> = ({
         
         if (isCorrect) correctCount++;
         else {
-            const getCorrect = (q: AnyQuizQuestion) => {
-                 switch (q.questionType) {
-                    case 'MCQ': case 'PICTURE_MCQ': return q.options.find(o => o.id === q.correctAnswerId)?.text;
-                    case 'TRUE_FALSE': return q.correctAnswerBool;
-                    case 'MATCHING': return q.correctPairs;
-                    default: return q.correctAnswer;
+            // If offline, we can't generate explanation.
+            if (navigator.onLine) {
+                 const getCorrect = (q: AnyQuizQuestion) => {
+                    switch (q.questionType) {
+                        case 'MCQ': case 'PICTURE_MCQ': return q.options.find(o => o.id === q.correctAnswerId)?.text;
+                        case 'TRUE_FALSE': return q.correctAnswerBool;
+                        case 'MATCHING': return q.correctPairs;
+                        default: return q.correctAnswer;
+                    }
                 }
+                newExplanations[i] = await generateQuizExplanation(language, baseLanguage, q, userAnswer, getCorrect(q));
+            } else {
+                newExplanations[i] = "Explanation not available offline.";
             }
-            newExplanations[i] = await generateQuizExplanation(language, baseLanguage, q, userAnswer, getCorrect(q));
         }
     }
     
@@ -319,6 +404,7 @@ const LearningModule: React.FC<LearningModuleProps> = ({
 
   const handleSituationalSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!navigator.onLine) { alert("Feature not available offline."); return; }
     const situation = situationInputRef.current?.value;
     if (!situation) return;
     setLoading(true); setError(null);
@@ -334,7 +420,10 @@ const LearningModule: React.FC<LearningModuleProps> = ({
   }
 
   const handleStartRolePlay = (scenario: RolePlayScenario) => {
-    const systemInstruction = `You are playing the role of: ${scenario.aiPersona}. The user is playing the role of: ${scenario.userPersona}. Your conversation should be in ${language}. You must also provide feedback on the user's grammar. Respond with a JSON object: {"response": "your response text...", "feedback": {"hasError": boolean, "correctedSentence": "...", "explanation": "..."}}. The feedback explanation MUST be in ${baseLanguage}. If there's no error, set hasError to false and other fields to empty strings. Start the conversation with your opening line now.`;
+    if (!navigator.onLine) { alert("AI Role-Play requires internet connection."); return; }
+    const systemInstruction = `You are playing the role of: ${scenario.aiPersona}. The user is playing the role of: ${scenario.userPersona}. Your conversation should be in ${language}. 
+    Respond with a JSON object: {"response": "your response text...", "feedback": {"hasError": boolean, "correctedSentence": "...", "explanation": "...", "pronunciationTip": "..."}}. 
+    The feedback explanation MUST be in ${baseLanguage}. If there's no error, set hasError to false and other fields to empty strings. Start the conversation with your opening line now.`;
     const newChat = createChatSession(systemInstruction);
     setChatSession(newChat);
     setSelectedScenario(scenario);
@@ -350,7 +439,7 @@ const LearningModule: React.FC<LearningModuleProps> = ({
       setChatMessages(prev => [...prev, newUserMessage]);
       if (chatInputRef.current) chatInputRef.current.value = '';
       setIsAiTyping(true);
-      onContentLoaded(`${language}:AI Role-Play:${selectedScenario?.title}`);
+      onContentLoaded(`${language}:${mode}:${subCategory}`);
       
       try {
           const response = await sendChatMessage(chatSession, text);
@@ -367,11 +456,26 @@ const LearningModule: React.FC<LearningModuleProps> = ({
   const renderHeader = () => (
     <div className="flex justify-between items-center mb-6">
       <Button variant="secondary" onClick={onBack}><ArrowLeftIcon /> Back</Button>
-      <div className="flex-1 text-center mx-2">
+      <div className="flex-1 text-center mx-2 overflow-hidden">
         <h2 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-gray-100 truncate">{mode}{quizType && ` - ${quizType}`}{tone && ` - ${tone}`}{difficulty && ` - ${difficulty}`}</h2>
-        <h3 className="text-sm sm:text-base font-medium text-gray-600 dark:text-gray-400">{subCategory}</h3>
+        <h3 className="text-sm sm:text-base font-medium text-gray-600 dark:text-gray-400 truncate">{subCategory}</h3>
       </div>
-      <Button variant="secondary" onClick={handleRefresh} disabled={loading}><RefreshIcon className={loading ? 'animate-spin' : ''} /> New</Button>
+      <div className="flex gap-2">
+          {content && !['situational_practice_init', 'role_play_setup', 'ai_tutor_init'].includes(content.type) && (
+              <Button 
+                variant="secondary" 
+                onClick={handleSave} 
+                disabled={isLessonSaved(currentLessonId)}
+                className={isLessonSaved(currentLessonId) ? "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30" : ""}
+                title={isLessonSaved(currentLessonId) ? "Saved Offline" : "Save for Offline"}
+              >
+                  {isLessonSaved(currentLessonId) ? <CheckCircleIcon className="w-5 h-5" /> : <DownloadIcon className="w-5 h-5" />}
+              </Button>
+          )}
+          <Button variant="secondary" onClick={handleRefresh} disabled={loading || !!preloadedContent || !navigator.onLine} title="Generate New">
+            <RefreshIcon className={loading ? 'animate-spin' : ''} /> New
+          </Button>
+      </div>
     </div>
   );
 
@@ -576,10 +680,59 @@ const LearningModule: React.FC<LearningModuleProps> = ({
         </div>
     );
   };
+
+  const renderAiTutor = (c: AiTutorInitContent) => {
+      return (
+        <div className="h-[70vh] flex flex-col bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-600 bg-cyan-50 dark:bg-cyan-900/20 rounded-t-lg">
+                <h3 className="font-bold text-lg text-cyan-900 dark:text-cyan-100 flex items-center gap-2">
+                    <span className="text-2xl">👨‍🏫</span> AI Tutor
+                </h3>
+                <p className="text-sm text-cyan-700 dark:text-cyan-300">{c.tutorPersona} • Practicing: {subCategory}</p>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {chatMessages.map(msg => <ChatMessageBubble key={msg.id} message={msg} />)}
+                {isAiTyping && <ChatMessageBubble message={{id:'typing', sender:'ai', text:'...'}} isTyping />}
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-gray-600 flex gap-2 flex-col sm:flex-row">
+                 <form onSubmit={handleSendChatMessage} className="flex items-center gap-2 flex-grow">
+                    <input ref={chatInputRef} type="text" className="w-full px-4 py-2 bg-white dark:bg-gray-700 rounded-full border border-gray-300 dark:border-gray-600 focus:ring-cyan-500 focus:outline-none" placeholder={`Chat in ${language}...`} disabled={isAiTyping}/>
+                    <Button type="submit" variant="primary" className="rounded-full !p-3 bg-cyan-600 hover:bg-cyan-700 focus:ring-cyan-500" disabled={isAiTyping}><PaperAirplaneIcon /></Button>
+                 </form>
+                 <Button 
+                    variant={isListening ? "secondary" : "primary"} 
+                    onClick={() => {
+                        if (isListening) {
+                            stopListening();
+                        } else {
+                            startListening();
+                        }
+                    }} 
+                    disabled={!hasRecognitionSupport} 
+                    className={`rounded-full !p-3 sm:w-auto ${isListening ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
+                    title="Speak your reply"
+                >
+                    <MicrophoneIcon className={isListening ? 'animate-pulse' : ''} />
+                 </Button>
+            </div>
+            {transcript && !speechError && !isListening && (
+                <div className="px-4 pb-2">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Recognized: "{transcript}"</p>
+                    <button 
+                        onClick={() => { if (chatInputRef.current) chatInputRef.current.value = transcript; }} 
+                        className="text-xs text-blue-600 hover:underline"
+                    >
+                        Use this text
+                    </button>
+                </div>
+            )}
+        </div>
+      );
+  };
   
   const renderContent = () => {
     if (loading) return <div className="flex flex-col items-center justify-center h-64"><Spinner /><p className="mt-4 text-lg">Generating lesson<span className="inline-block animate-pulse">.</span><span className="inline-block animate-pulse [animation-delay:0.1s]">.</span><span className="inline-block animate-pulse [animation-delay:0.2s]">.</span></p></div>;
-    if (error) return <div className="text-center p-8 bg-red-50 dark:bg-red-900/30 rounded-lg"><p className="text-red-600 dark:text-red-300 font-semibold">Oops, something went wrong!</p><p className="mt-2 text-red-500 dark:text-red-400">{error}</p><Button variant="primary" onClick={handleRefresh} className="mt-4">Try Again</Button></div>;
+    if (error) return <div className="text-center p-8 bg-red-50 dark:bg-red-900/30 rounded-lg"><p className="text-red-600 dark:text-red-300 font-semibold">Oops, something went wrong!</p><p className="mt-2 text-red-500 dark:text-red-400">{error}</p><Button variant="primary" onClick={handleRefresh} className="mt-4" disabled={!navigator.onLine}>{navigator.onLine ? "Try Again" : "Check Connection"}</Button></div>;
     if (!content) return <p>No content. Try refreshing.</p>;
     switch (content.type) {
       case 'grammar': return renderGrammarContent(content);
@@ -591,6 +744,7 @@ const LearningModule: React.FC<LearningModuleProps> = ({
       case 'quiz': return renderQuizContent(content);
       case 'situational_practice_init': case 'situational_practice_response': return renderSituationalPractice(content);
       case 'role_play_setup': return renderRolePlay(content);
+      case 'ai_tutor_init': return renderAiTutor(content);
       default: return <p>Unsupported content type.</p>;
     }
   };

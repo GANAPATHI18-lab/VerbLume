@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import type { LearningMode, Language, Category, QuizType, Tone, Difficulty, GrammarTopicDetails } from '../types';
+import type { LearningMode, Language, Category, QuizType, Tone, Difficulty, GrammarTopicDetails, SavedLesson } from '../types';
 import { LEARNING_MODES, QUIZ_TYPES, TONES, DIFFICULTY_LEVELS } from '../types';
 import type { PerformanceData } from '../hooks/usePerformance';
 import { generateGrammarTopicDetails } from '../services/geminiService';
@@ -10,10 +11,11 @@ import Leaderboard from './Leaderboard';
 import TrashIcon from './icons/TrashIcon';
 import TrophyIcon from './icons/TrophyIcon';
 import Button from './ui/Button';
-import Spinner from './ui/Spinner';
+import SavedLessonsList from './SavedLessonsList';
 
 interface CategoryViewProps {
   onSelectMode: (category: string, subCategory: string, mode: LearningMode, options?: { quizType?: QuizType, tone?: Tone, difficulty?: Difficulty }) => void;
+  onSelectSavedLesson: (lesson: SavedLesson) => void;
   performanceData: PerformanceData;
   language: Language;
   baseLanguage: Language;
@@ -26,7 +28,7 @@ interface CategoryViewProps {
   onRemoveTopic: (categoryName: string, topicName: string) => void;
 }
 
-const CategoryView: React.FC<CategoryViewProps> = ({ onSelectMode, performanceData, language, baseLanguage, overallMastery, categories, points, onAddTopic, onAddCategory, onRemoveCategory, onRemoveTopic }) => {
+const CategoryView: React.FC<CategoryViewProps> = ({ onSelectMode, onSelectSavedLesson, performanceData, language, baseLanguage, overallMastery, categories, points, onAddTopic, onAddCategory, onRemoveCategory, onRemoveTopic }) => {
   const [openCategory, setOpenCategory] = useState<string | null>(categories.length > 0 ? categories[0].name : null);
   const [quizSelectionFor, setQuizSelectionFor] = useState<string | null>(null);
   const [visualContextSelectionFor, setVisualContextSelectionFor] = useState<string | null>(null);
@@ -131,6 +133,8 @@ const CategoryView: React.FC<CategoryViewProps> = ({ onSelectMode, performanceDa
           return "text-rose-800 bg-rose-100 hover:bg-rose-200 dark:bg-rose-900 dark:text-rose-200 dark:hover:bg-rose-800";
       case 'AI Role-Play':
           return "text-purple-800 bg-purple-100 hover:bg-purple-200 dark:bg-purple-900 dark:text-purple-200 dark:hover:bg-purple-800";
+      case 'AI Tutor':
+          return "text-cyan-800 bg-cyan-100 hover:bg-cyan-200 dark:bg-cyan-900 dark:text-cyan-200 dark:hover:bg-cyan-800";
       default:
         return "text-blue-800 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:text-blue-200 dark:hover:bg-blue-800";
     }
@@ -157,6 +161,8 @@ const CategoryView: React.FC<CategoryViewProps> = ({ onSelectMode, performanceDa
                 Leaderboard
             </Button>
         </div>
+
+        <SavedLessonsList language={language} onOpenLesson={onSelectSavedLesson} />
 
          <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-200 mb-4">Select a Topic</h2>
         {categories.map((category) => (

@@ -52,7 +52,12 @@ export const useLanguages = (): [
     try {
         const fetchDetails = async (lang: {name: string, emoji: string, ttsCode: string}) => {
             const details = await generateLanguageDetails(lang.name, baseLanguage);
-            return { ...lang, nativeName: details.nativeName };
+            return { 
+                ...lang, 
+                nativeName: details.nativeName,
+                greeting: details.greeting,
+                greetingInBase: details.greetingInBase
+            };
         };
 
         const defaultLangsPromises = defaultLanguagesConfig.map(lang => 
@@ -93,12 +98,15 @@ export const useLanguages = (): [
             nativeName: details.nativeName,
             emoji: details.emoji,
             ttsCode: details.ttsCode,
+            greeting: details.greeting,
+            greetingInBase: details.greetingInBase,
             isCustom: true
         };
         
         setLanguages(prev => [...prev, newLanguage]);
 
         const customLangs = getStoredCustomLanguages();
+        // We persist essential info; details are re-fetched on reload to adapt to potential baseLanguage changes
         persistCustomLanguages([...customLangs, {name: newLanguage.name, emoji: newLanguage.emoji, ttsCode: newLanguage.ttsCode, isCustom: true}]);
 
     } catch (error) {

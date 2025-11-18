@@ -335,6 +335,18 @@ IMPORTANT DETAIL: For languages OTHER THAN English and Hindi, for each word in t
 Where relevant, also provide a helpful 'Pro Tip' in ${baseLanguage}.`;
 
     switch(mode) {
+        case "AI Tutor":
+            schema = {
+                type: Type.OBJECT,
+                properties: {
+                    type: { type: Type.STRING, enum: ['ai_tutor_init'] },
+                    initialMessage: { type: Type.STRING, description: `An engaging opening question or greeting in ${language} to start a conversation about ${subCategory}.` },
+                    tutorPersona: { type: Type.STRING, description: `A short description of the tutor's personality (e.g., 'Friendly & Patient', 'Strict but Fair').` }
+                },
+                required: ["type", "initialMessage", "tutorPersona"]
+            };
+            prompt = `${basePrompt} The user wants an 'AI Tutor' session. Create an initial state for a conversation about '${subCategory}'. The tutor should be helpful and correct mistakes.`;
+            break;
         case "AI Role-Play":
             schema = rolePlayScenarioSchema;
             prompt = `${basePrompt} The user wants to do an 'AI Role-Play'. Create 2-3 distinct, engaging role-playing scenarios related to the sub-category. Follow the JSON schema precisely. Each scenario needs personas for the user and AI, and a good opening line for the AI to start the conversation in ${language}.`;
@@ -578,8 +590,41 @@ export const sendChatMessage = async (chat: Chat, message: string): Promise<Gene
     return await withRetry(() => chat.sendMessage({ message }));
 };
 
-export const generateCoDeveloperResponse = async (prompt: string): Promise<string> => {
-    const fullPrompt = `You are an AI Co-Developer embedded in a React/TypeScript web application called "VerbLume", a language learning app. A user has requested a change or asked a question. User Request: "${prompt}". Your Role: Provide a helpful, conversational response. If it's a feature request you can't fulfill, explain the limitation kindly. If it's a feasible UI/style change, describe what you would change and how. For example, "Okay, I can change the header. I would modify the CSS gradient in App.tsx to use purple and pink." If it's a question, answer it concisely. Keep the response friendly and brief. Do not provide code blocks.`;
+export const generateCoDeveloperResponse = async (userPrompt: string, appContext: string = ''): Promise<string> => {
+    const systemPrompt = `
+You are an expert AI Co-Developer embedded in "VerbLume", a modern React/TypeScript language learning application.
+Your goal is to help the user understand the app, debug issues, or brainstorm features.
+
+### Tech Stack
+- Framework: React 19 (Functional Components, Hooks)
+- Language: TypeScript
+- Styling: Tailwind CSS
+- AI: Google Gemini API (@google/genai)
+- Build Tool: Vite
+
+### Project Structure
+- /App.tsx: Main entry, handles global state (selection, baseLanguage) and routing.
+- /services/geminiService.ts: Handles all interactions with Gemini API (content generation, chat).
+- /hooks/: Custom hooks for state (useLanguages, useSavedLessons, usePerformance, useCategories, useStreak, usePoints, useActivityLog, useZoom).
+- /components/: UI components.
+  - /LearningModule.tsx: The core learning interface for all modes.
+  - /CategoryView.tsx: Topic selection.
+  - /LanguageSelector.tsx, /BaseLanguageSelector.tsx: Language management.
+  - /ui/: Reusable UI (Button, Card, Spinner).
+
+### Current App Context
+${appContext}
+
+### Instructions
+1. **Be Context-Aware**: Use the provided "Current App Context" to tailor your answers. If the user is in a quiz, talk about quiz logic.
+2. **Technical & Educational**: You can explain how the code works or suggest improvements.
+3. **Code Snippets**: If asked for code, provide clean, modern React/Tailwind snippets enclosed in markdown code blocks (\`\`\`).
+4. **Tone**: Friendly, professional, and encouraging.
+5. **Brevity**: Keep explanations concise unless asked for detail.
+`;
+
+    const fullPrompt = `${systemPrompt}\n\nUser Query: "${userPrompt}"`;
+
     try {
         const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({ model: 'gemini-2.5-flash', contents: fullPrompt }));
         return response.text.trim();

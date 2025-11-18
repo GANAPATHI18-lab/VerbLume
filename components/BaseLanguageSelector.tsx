@@ -1,13 +1,23 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Card from './ui/Card';
+import AddLanguageForm from './AddLanguageForm';
+import { generateLanguageDetails } from '../services/geminiService';
+import TrashIcon from './icons/TrashIcon';
 
 interface BaseLanguageSelectorProps {
   onSelect: (language: string) => void;
 }
 
-// A static list of languages to choose as the base language.
-const supportedBaseLanguages = [
+interface BaseLanguageOption {
+  name: string;
+  nativeName: string;
+  emoji: string;
+  isCustom?: boolean;
+}
+
+// Default supported languages
+const defaultBaseLanguages: BaseLanguageOption[] = [
   { name: 'English', nativeName: 'English', emoji: '🇬🇧' },
   { name: 'Telugu', nativeName: 'తెలుగు', emoji: '🛕' },
   { name: 'Hindi', nativeName: 'हिन्दी', emoji: '🇮🇳' },
@@ -15,7 +25,56 @@ const supportedBaseLanguages = [
   { name: 'French', nativeName: 'Français', emoji: '🇫🇷' },
 ];
 
+const CUSTOM_BASE_LANG_KEY = 'verblume-custom-base-languages';
+
 const BaseLanguageSelector: React.FC<BaseLanguageSelectorProps> = ({ onSelect }) => {
+  const [customBaseLanguages, setCustomBaseLanguages] = useState<BaseLanguageOption[]>([]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(CUSTOM_BASE_LANG_KEY);
+      if (stored) {
+        setCustomBaseLanguages(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.error("Failed to load custom base languages", e);
+    }
+  }, []);
+
+  const handleAddBaseLanguage = async (name: string) => {
+     // Check duplicates in both lists
+     if (defaultBaseLanguages.some(l => l.name.toLowerCase() === name.toLowerCase()) || 
+         customBaseLanguages.some(l => l.name.toLowerCase() === name.toLowerCase())) {
+         throw new Error("This language is already in the list.");
+     }
+
+     // Fetch details using English as the reference for the "nativeName" (or the name in the target lang)
+     // We use 'English' here to generate consistent metadata for the card.
+     const details = await generateLanguageDetails(name, 'English');
+     
+     const newLang: BaseLanguageOption = {
+         name: name,
+         nativeName: details.nativeName,
+         emoji: details.emoji,
+         isCustom: true
+     };
+
+     const updatedCustom = [...customBaseLanguages, newLang];
+     setCustomBaseLanguages(updatedCustom);
+     localStorage.setItem(CUSTOM_BASE_LANG_KEY, JSON.stringify(updatedCustom));
+  };
+
+  const handleRemoveBaseLanguage = (e: React.MouseEvent, name: string) => {
+      e.stopPropagation();
+      if (window.confirm(`Remove ${name} from your base languages?`)) {
+          const updatedCustom = customBaseLanguages.filter(l => l.name !== name);
+          setCustomBaseLanguages(updatedCustom);
+          localStorage.setItem(CUSTOM_BASE_LANG_KEY, JSON.stringify(updatedCustom));
+      }
+  };
+
+  const allLanguages = [...defaultBaseLanguages, ...customBaseLanguages];
+
   return (
     <div className="animate-fade-in min-h-screen flex flex-col items-center justify-center p-4 bg-gray-100 dark:bg-gray-900">
       <div className="text-center mb-10">
@@ -30,18 +89,28 @@ const BaseLanguageSelector: React.FC<BaseLanguageSelectorProps> = ({ onSelect })
             This is the language you already know. All lessons and explanations will be in this language.
         </p>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 max-w-5xl">
-        {supportedBaseLanguages.map((lang) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 max-w-6xl">
+        {allLanguages.map((lang) => (
           <Card
             key={lang.name}
             onClick={() => onSelect(lang.name)}
-            className="flex flex-col items-center justify-center p-6 text-center group"
+            className="flex flex-col items-center justify-center p-6 text-center group relative"
           >
+            {lang.isCustom && (
+                <button 
+                    onClick={(e) => handleRemoveBaseLanguage(e, lang.name)}
+                    className="absolute top-2 right-2 p-1.5 rounded-full text-gray-400 bg-white/50 dark:bg-gray-900/50 opacity-0 group-hover:opacity-100 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900 dark:hover:text-red-400 transition-all"
+                    title={`Remove ${lang.name}`}
+                >
+                    <TrashIcon className="w-4 h-4" />
+                </button>
+            )}
             <span className="text-6xl mb-4">{lang.emoji}</span>
             <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{lang.name}</h3>
             <p className="text-gray-500 dark:text-gray-400">{lang.nativeName}</p>
           </Card>
         ))}
+        <AddLanguageForm onAddLanguage={handleAddBaseLanguage} />
       </div>
     </div>
   );

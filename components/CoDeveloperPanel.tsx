@@ -11,14 +11,22 @@ import Button from './ui/Button';
 interface CoDeveloperPanelProps {
   isOpen: boolean;
   onClose: () => void;
+  currentContext: string;
 }
 
-const CoDeveloperPanel: React.FC<CoDeveloperPanelProps> = ({ isOpen, onClose }) => {
+const SUGGESTED_QUESTIONS = [
+    "Explain this screen",
+    "How does the AI work?",
+    "Tech stack?",
+    "Show me a button code"
+];
+
+const CoDeveloperPanel: React.FC<CoDeveloperPanelProps> = ({ isOpen, onClose, currentContext }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'init-codev',
       sender: 'ai',
-      text: "Hello! I'm your AI Co-Developer. Ask me to add a feature, change a style, or ask any question about this app. For example, try asking me to 'change the header gradient to be purple and pink'."
+      text: "Hello! I'm your AI Co-Developer. I know about the React code, Tailwind styles, and Gemini integration powering this app.\n\nHow can I help you today?"
     }
   ]);
   const [userInput, setUserInput] = useState('');
@@ -39,26 +47,30 @@ const CoDeveloperPanel: React.FC<CoDeveloperPanelProps> = ({ isOpen, onClose }) 
     }
   }, [isOpen]);
 
-  const handleSend = async (e: FormEvent) => {
+  const sendMessage = async (text: string) => {
+      const trimmedInput = text.trim();
+      if (!trimmedInput || isLoading) return;
+
+      const userMsg: ChatMessage = { id: `user-${Date.now()}`, sender: 'user', text: trimmedInput };
+      setMessages(prev => [...prev, userMsg]);
+      setUserInput('');
+      setIsLoading(true);
+
+      try {
+        const responseText = await generateCoDeveloperResponse(trimmedInput, currentContext);
+        const aiMsg: ChatMessage = { id: `ai-${Date.now()}`, sender: 'ai', text: responseText };
+        setMessages(prev => [...prev, aiMsg]);
+      } catch (err: any) {
+        const errorMsg: ChatMessage = { id: `err-${Date.now()}`, sender: 'ai', text: `Sorry, I ran into an error: ${err.message}` };
+        setMessages(prev => [...prev, errorMsg]);
+      } finally {
+        setIsLoading(false);
+      }
+  };
+
+  const handleSend = (e: FormEvent) => {
     e.preventDefault();
-    const trimmedInput = userInput.trim();
-    if (!trimmedInput || isLoading) return;
-
-    const userMsg: ChatMessage = { id: `user-${Date.now()}`, sender: 'user', text: trimmedInput };
-    setMessages(prev => [...prev, userMsg]);
-    setUserInput('');
-    setIsLoading(true);
-
-    try {
-      const responseText = await generateCoDeveloperResponse(trimmedInput);
-      const aiMsg: ChatMessage = { id: `ai-${Date.now()}`, sender: 'ai', text: responseText };
-      setMessages(prev => [...prev, aiMsg]);
-    } catch (err: any) {
-      const errorMsg: ChatMessage = { id: `err-${Date.now()}`, sender: 'ai', text: `Sorry, I ran into an error: ${err.message}` };
-      setMessages(prev => [...prev, errorMsg]);
-    } finally {
-      setIsLoading(false);
-    }
+    sendMessage(userInput);
   };
 
   if (!isOpen) {
@@ -83,6 +95,20 @@ const CoDeveloperPanel: React.FC<CoDeveloperPanelProps> = ({ isOpen, onClose }) 
             {messages.map(msg => <ChatMessageBubble key={msg.id} message={msg} />)}
             {isLoading && <ChatMessageBubble message={{id: 'typing', sender: 'ai', text: '...'}} isTyping />}
         </div>
+        
+        {/* Quick Suggestions */}
+        <div className="px-4 pb-2 flex gap-2 overflow-x-auto scrollbar-hide flex-shrink-0">
+            {SUGGESTED_QUESTIONS.map((q, i) => (
+                <button 
+                    key={i}
+                    onClick={() => sendMessage(q)}
+                    disabled={isLoading}
+                    className="whitespace-nowrap text-xs px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded-full border border-blue-100 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                >
+                    {q}
+                </button>
+            ))}
+        </div>
 
         {/* Input Form */}
         <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
@@ -93,7 +119,7 @@ const CoDeveloperPanel: React.FC<CoDeveloperPanelProps> = ({ isOpen, onClose }) 
                     value={userInput}
                     onChange={(e) => setUserInput(e.target.value)}
                     className="w-full px-4 py-2 bg-gray-100 dark:bg-gray-900 border-2 border-gray-300 dark:border-gray-600 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., Make the buttons rounder"
+                    placeholder="Ask about the app code..."
                     disabled={isLoading}
                 />
                 <button type="submit" className="flex-shrink-0 p-3 rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500" disabled={!userInput.trim() || isLoading}>
